@@ -1,0 +1,11 @@
+name: audio-ml
+channels:
+  - defaults
+dependencies:
+  - python=3.13
+  - librosa
+  - pytorch
+  - torchaudio
+  - scipy
+  - numpy
+prefix: C:\Users\alexa\anaconda3\envs\audio-ml
