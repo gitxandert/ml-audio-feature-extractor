@@ -1,7 +1,8 @@
 numpy
-librosa
-torchaudio
-pytorch
 scipy
 matplotlib
 scikit-learn
+librosa
+torchaudio
+torch
+umap-learn

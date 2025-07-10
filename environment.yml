@@ -1,6 +1,6 @@
 name: audio-ml
 channels:
-  - defaults
+  - conda-forge
 dependencies:
   - python=3.13
   - librosa
@@ -8,4 +8,6 @@ dependencies:
   - torchaudio
   - scipy
   - numpy
-prefix: C:\Users\alexa\anaconda3\envs\audio-ml
+  - pip
+  - pip:
+    - umap-learn
