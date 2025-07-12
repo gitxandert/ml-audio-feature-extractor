@@ -5,4 +5,4 @@ scikit-learn
 librosa
 torchaudio
 torch
-umap-learn
+umap-learn>=0.5.8
