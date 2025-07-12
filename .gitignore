@@ -1,0 +1,58 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VS Code settings
+.vscode/
+.history/
+
+# Dev Container metadata
+.devcontainer/.env
+.devcontainer/.env.local
+
+# macOS and Linux files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.swp
+*~
+
+# Python packaging artifacts
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Logs
+*.log
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.cache/
+.pytest_cache/
+
+# Docker-related
+*.pid
+*.pid.lock
+*.db
+docker-compose.override.yml
+
+# Custom pip cache volume (already mounted in your devcontainer)
+home/vscode/.cache/pip/
