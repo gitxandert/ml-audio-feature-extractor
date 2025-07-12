@@ -1,9 +1,6 @@
 {
     "name": "ml-audio-feature-extractor",
-    "build": {
-        "dockerfile": "../Dockerfile",
-        "context": ".."
-    },
+    "image": "ml-audio-extractor-dev",
     "settings": {
         "python.defaultInterpreterPath": "usr/local/bin/python",
         "terminal.integrated.defaultProfile.linux": "bash"

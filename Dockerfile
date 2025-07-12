@@ -12,14 +12,20 @@ RUN apt-get update && \
 # ---- build wheels --------------------------------------------
 FROM base AS build
 WORKDIR /tmp
-COPY requirements.txt .
-RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+COPY requirements.txt requirements-dev.txt /tmp/
+ENV PIP_CACHE_DIR=/tmp/pip-cache
+RUN pip install --upgrade pip && \
+    pip wheel --cache-dir=$PIP_CACHE_DIR --wheel-dir /wheels \
+        -r requirements.txt \
+        -r requirements-dev.txt && \
+    rm requirements*.txt
+
 
 # ---- final image ---------------------------------------------
 FROM base
 WORKDIR /app
 COPY --from=build /wheels /wheels
-RUN pip install --no-cache-dir /wheels/*.whl
+RUN pip install --cache-dir=$PIP_CACHE_DIR /wheels/*.whl
 COPY . .
 CMD ["python", "main.py"]
 
@@ -37,4 +43,4 @@ RUN groupadd --gid $USER_GID $USERNAME \
 
 USER $USERNAME
 ENV HOME=/home/$USERNAME
-WORKDIR /app
+# WORKDIR /app
