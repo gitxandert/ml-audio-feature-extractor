@@ -1,0 +1,21 @@
+{
+    "name": "ml-audio-feature-extractor",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": ".."
+    },
+    "settings": {
+        "python.defaultInterpreterPath": "usr/local/bin/python",
+        "terminal.integrated.defaultProfile.linux": "bash"
+    },
+    "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter"
+    ],
+    "postCreateCommand": "pip install -e .[dev] || true",
+    "remoteUser": "vscode",
+    "mounts": [
+        "source=pythoncache,target=/home/vscode/.cache/pip,type=volume"
+    ]
+}
