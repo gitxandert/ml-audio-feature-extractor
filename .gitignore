@@ -54,5 +54,5 @@ coverage.xml
 *.db
 docker-compose.override.yml
 
-# Custom pip cache volume (already mounted in your devcontainer)
+# Custom pip cache volume
 home/vscode/.cache/pip/
