@@ -1,16 +1,18 @@
-def test_reduce_to_3d(test_waveform, tmp_path):
-    from extractor.features import extract_embeddings
-    waveform, sr = test_waveform
-    embeddings = extract_embeddings(waveform, sr)
-    assert embeddings.ndim == 2
-    assert embeddings.shape[1] == 768
+import torch
 
-    from extractor.features import reduce_to_3d
-    embeddings_3d = reduce_to_3d(embeddings)
-    assert embeddings_3d.shape[1] == 3
-    assert embeddings_3d.ndim == 2
+def test_process_audio_files(dummy_audio_files):
+    from extractor.features import process_audio_files
+    results = process_audio_files(dummy_audio_files)
+    
+    assert len(results) == len(dummy_audio_files)
 
-    from extractor.features import plot_3d_map
-    out_path = tmp_path / "test_plot.png"
-    plot_3d_map(embeddings_3d, out_path)
-    assert out_path.exists()
+    for entry in results:
+        assert 'path' in entry
+        assert 'embeddings' in entry
+
+        assert isinstance(entry['embeddings'], torch.Tensor)
+
+        assert entry['embeddings'].ndim == 1
+        assert entry['embeddings'].shape[0] == 768
+
+        assert entry['path'] in dummy_audio_files

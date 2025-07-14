@@ -42,13 +42,13 @@ def chunk_audio(waveform, sample_rate, chunk_duration=5.0, overlap=0.0):
     return chunks
 
 def extract_embeddings(chunks: list[torch.Tensor], model: torchaudio.models.Wav2Vec2Model):
-
-    batch_tensor = torch.stack(chunks)
+    batch_tensor = torch.stack([c.squeeze(0) for c in chunks])
 
     with torch.inference_mode():
         out = model(batch_tensor)
     
-    pooled = out.mean(dim=1)
+    features = out[0]
+    pooled = features.mean(dim=1)
     return list(pooled)
 
 def aggregate_embeddings(embeddings: list[torch.Tensor]) -> torch.Tensor:
