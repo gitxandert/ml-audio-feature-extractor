@@ -10,13 +10,10 @@ from matplotlib.animation import FuncAnimation, FFMpegFileWriter
 import matplotlib
 matplotlib.use("Agg")
 
-def extract_embeddings(waveform: torch.Tensor, sample_rate: int) -> torch.Tensor:
+def load_model_once():
     bundle = torchaudio.pipelines.WAV2VEC2_BASE
     model = bundle.get_model()
-    with torch.inference_mode():
-        output = model(waveform)
-    embeddings = output[0][0]
-    return embeddings
+    return model
 
 def load_and_preprocess_waveform(path: str, target_sr: int = 16000) -> tuple[torch.Tensor, int]:
     waveform, sample_rate = torchaudio.load(path)
@@ -27,6 +24,45 @@ def load_and_preprocess_waveform(path: str, target_sr: int = 16000) -> tuple[tor
         waveform = resampler(waveform)
     return waveform, target_sr
 
+def chunk_audio(waveform, sample_rate, chunk_duration=5.0, overlap=0.0):
+    chunk_size = int(chunk_duration * sample_rate)
+    step_size = int((chunk_duration - overlap) * sample_rate)
+
+    chunks = []
+    for start in range(0, waveform.shape[1] - chunk_size + 1, step_size):
+        chunk = waveform[:, start:start + chunk_size]
+        chunks.append(chunk)
+
+    return chunks
+
+def extract_embeddings(chunks: list[torch.Tensor], model: torchaudio.models.Wav2Vec2Model):
+
+    batch_tensor = torch.stack(chunks)
+
+    with torch.inference_mode():
+        out = model(batch_tensor)
+    
+    pooled = out.mean(dim=1)
+    return list(pooled)
+
+def aggregate_embeddings(embeddings: list[torch.Tensor]) -> torch.Tensor:
+    return torch.stack(embeddings).mean(dim=0)
+
+def process_audio_files(filepaths):
+    model = load_model_once()
+
+    results = []
+    for path in filepaths:
+        waveform, sr = load_and_preprocess_waveform(path)
+        chunks = chunk_audio(waveform, sr)
+        embeddings = extract_embeddings(chunks, model)
+        aggregate = aggregate_embeddings(embeddings)
+        results.append({
+            'path': path,
+            'embeddings': aggregate,
+        })
+    
+    return results
 
 def reduce_to_3d(embeddings: torch.Tensor) -> np.ndarray:
     embeddings_np = embeddings.numpy()
