@@ -31,6 +31,12 @@ def chunk_audio(waveform, sample_rate, chunk_duration=5.0, overlap=0.0):
     chunks = []
     for start in range(0, waveform.shape[1] - chunk_size + 1, step_size):
         chunk = waveform[:, start:start + chunk_size]
+
+        # pad chunk if not long enough
+        if chunk.shape[-1] < chunk_size:
+            pad_amount = chunk_size - chunk.shape[-1]
+            chunk = torch.nn.functional.pad(chunk, (0, pad_amount))
+
         chunks.append(chunk)
 
     return chunks
