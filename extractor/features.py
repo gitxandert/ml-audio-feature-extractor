@@ -7,6 +7,8 @@ import matplotlib.cm as cm
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation, FFMpegFileWriter
 
+from sklearn.mixture import GaussianMixture
+
 import matplotlib
 matplotlib.use("Agg")
 
@@ -70,11 +72,42 @@ def process_audio_files(filepaths):
     
     return results
 
-def reduce_to_3d(embeddings: torch.Tensor) -> np.ndarray:
-    embeddings_np = embeddings.numpy()
-    reducer = umap.UMAP(n_components=3)
-    embeddings_3d = reducer.fit_transform(embeddings_np)
-    return embeddings_3d
+def stack_embeddings(results):
+    embeddings = [r['embeddings'] for r in results]
+    return torch.stack(embeddings)
+
+def reduce_to_nd(embeddings: torch.Tensor, dim: int=10) -> np.ndarray:
+    embeddings_numpy = embeddings.numpy()
+    n_samples = embeddings_numpy.shape[0]
+
+    dim = min(dim, n_samples - 1)
+    n_neighbors = min(15, n_samples - 1)
+    
+    reducer = umap.UMAP(n_components=dim, n_neighbors=n_neighbors)
+    embeddings_nd = reducer.fit_transform(embeddings_numpy)
+    return embeddings_nd
+
+def fit_gmms_with_bic(data, max_components=10):
+    bic_scores = []
+    models = []
+
+    for k in range(1, max_components + 1):
+        gmm = GaussianMixture(n_components=k, covariance_type='full', random_state=144)
+        gmm.fit(data)
+
+        bic = gmm.bic(data)
+
+        bic_scores.append(bic)
+        models.append(gmm)
+    
+    bic_scores = np.array(bic_scores)
+
+    best_index = np.argmin(bic_scores)
+    best_model = models[best_index]
+    best_k = best_index + 1
+
+    return best_model, best_k, bic_scores
+
 
 def plot_3d_map(embeddings_3d: np.ndarray, out_path="umap_scatter.png"):
     fig = plt.figure()

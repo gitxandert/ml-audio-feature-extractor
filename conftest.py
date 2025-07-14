@@ -27,7 +27,9 @@ def gen_white_noise():
 def gen_clicks():
     sr, duration = random_var()
     waveform = torch.zeros(1, int(sr * duration))
-    click_samples = torch.arange(0, waveform.shape[1], int(sr * 0.1))
+
+    rand_interval = np.random.uniform(0.1, 1.0)
+    click_samples = torch.arange(0, waveform.shape[1], int(sr * rand_interval))
     waveform[0, click_samples] = 1.0
     return waveform, sr
 
@@ -55,7 +57,7 @@ def gen_test_cases(count: int=10) -> dict[str, tuple[torch.Tensor, int]]:
 def dummy_audio_files():
     with tempfile.TemporaryDirectory() as tmpdir:
         filepaths = []
-        test_cases = gen_test_cases()
+        test_cases = gen_test_cases(20)
 
         for name, (waveform, sr) in test_cases.items():
             path = os.path.join(tmpdir, name)

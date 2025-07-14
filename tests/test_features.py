@@ -16,3 +16,22 @@ def test_process_audio_files(dummy_audio_files):
         assert entry['embeddings'].shape[0] == 768
 
         assert entry['path'] in dummy_audio_files
+
+def test_fit_gmms(dummy_audio_files):
+    from extractor.features import process_audio_files
+    results = process_audio_files(dummy_audio_files)
+
+    print(f"Embeddings length: {len(results)}")
+
+    from extractor.features import stack_embeddings
+    from extractor.features import reduce_to_nd
+    stacked_results = stack_embeddings(results)
+    results_nd = reduce_to_nd(stacked_results, 10)
+
+    print(f"Reduced embeddings shape: {results_nd[1].shape}")
+
+    from extractor.features import fit_gmms_with_bic
+    model, k, scores = fit_gmms_with_bic(results_nd)
+
+    assert model.n_components == k
+    print(f"Predicted number of components: {k}")
