@@ -2,8 +2,7 @@ import torchaudio.pipelines
 import torch
 import numpy as np
 import umap
-import os
-import csv
+import os, shutil
 import matplotlib.pyplot as plt
 
 from sklearn.mixture import GaussianMixture
@@ -83,6 +82,25 @@ def reduce_to_nd(embeddings: torch.Tensor, dim: int=10) -> np.ndarray:
     embeddings_nd = reducer.fit_transform(embeddings_numpy)
     return embeddings_nd
 
+def plot_clusters(data, labels, centers=None, title="GMM Clustering", save_path="cluster_plot3.png"):
+    plt.figure(figsize=(8, 6))
+
+    colors = []
+    for label in np.unique(labels):
+        cluster_points = data[labels == label]
+        scatter = plt.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {label}', s=40, alpha=0.7)
+        new_color = scatter.get_facecolor()
+        colors.append(new_color)
+    
+    if centers is not None:
+        plt.scatter(centers[:, 0], centers[:, 1], c=colors, marker='x', s=100, label='Centers')
+    
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(save_path)
+    print(f"Saved plot to: {save_path}")
+
 def fit_gmms_with_bic(data, max_components=10, min_cluster_size=1, alpha=0.0):
     n_samples = len(data)
     upper_bound = min(n_samples, max_components)
@@ -100,8 +118,7 @@ def fit_gmms_with_bic(data, max_components=10, min_cluster_size=1, alpha=0.0):
     for k in range(1, upper_bound + 1):
         gmm = GaussianMixture(
             n_components=k, 
-            covariance_type='full', 
-            reg_covar=1e-3,
+            covariance_type='full',
             random_state=144
         )
         gmm.fit(data)
@@ -125,27 +142,18 @@ def fit_gmms_with_bic(data, max_components=10, min_cluster_size=1, alpha=0.0):
 
     best_score, best_bic, best_dist, best_k, best_model = candidates[0]
 
-    plot_clusters(data, best_model.predict(data), best_model.means_)
+    plottable_data = umap.UMAP(n_components=2).fit_transform(data)
+    gmm = GaussianMixture(n_components=best_k).fit(plottable_data)
+    plottable_labels = gmm.predict(plottable_data)
+    plottable_centers = gmm.means_
+    plot_clusters(plottable_data, plottable_labels, centers=plottable_centers)
 
     return best_model, best_k, best_bic
 
-def plot_clusters(data, labels, centers=None, title="GMM Clustering", save_path="cluster_plot3.png"):
-    plt.figure(figsize=(8, 6))
-    for label in np.unique(labels):
-        cluster_points = data[labels == label]
-        plt.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {label}', s=40, alpha=0.7)
-    
-    if centers is not None:
-        plt.scatter(centers[:, 0], centers[:, 1], color='black', marker='x', s=100, label='Centers')
-    
-    plt.title(title)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(save_path)
-    print(f"Saved plot to: {save_path}")
+def cluster_files(filepaths, data, model, top_dir="clusters"):
+    if os.path.exists(top_dir) and os.path.isdir(top_dir):
+        shutil.rmtree(top_dir)
 
-def analyze_clusters(results, data, model):
-    filepaths = [r['path'] for r in results]
     labels = model.predict(data)
 
     sorted_indices = np.argsort(labels)
@@ -154,8 +162,12 @@ def analyze_clusters(results, data, model):
     sorted_paths = [filepaths[i] for i in sorted_indices]
 
     current_cluster = None
+    cluster_dir = None
     for label, path in zip(sorted_labels, sorted_paths):
         if label != current_cluster:
             current_cluster = label
+            cluster_dir = os.path.join(top_dir, f"{label}")
+            os.makedirs(cluster_dir, exist_ok=True)
             print(f"\nCluster {label}:")
+        shutil.move(path, cluster_dir)
         print(f"  {os.path.basename(path)}")

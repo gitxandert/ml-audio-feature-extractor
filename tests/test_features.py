@@ -18,8 +18,10 @@ def test_process_audio_files(dummy_audio_files):
         assert entry['path'] in dummy_audio_files
 
 def test_fit_gmms(dummy_audio_files):
+    files = dummy_audio_files
+
     from extractor.features import process_audio_files
-    results = process_audio_files(dummy_audio_files)
+    results = process_audio_files(files)
 
     print(f"Embeddings length: {len(results)}")
 
@@ -35,5 +37,5 @@ def test_fit_gmms(dummy_audio_files):
 
     assert model.n_components == k
     
-    from extractor.features import analyze_clusters
-    analyze_clusters(results, data, model)
+    from extractor.features import cluster_files
+    cluster_files(files, data, model)
