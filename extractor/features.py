@@ -2,15 +2,11 @@ import torchaudio.pipelines
 import torch
 import numpy as np
 import umap
-import os, matplotlib.pyplot as plt
-import matplotlib.cm as cm
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.animation import FuncAnimation, FFMpegFileWriter
+import os
+import csv
+import matplotlib.pyplot as plt
 
 from sklearn.mixture import GaussianMixture
-
-import matplotlib
-matplotlib.use("Agg")
 
 def load_model_once():
     bundle = torchaudio.pipelines.WAV2VEC2_BASE
@@ -80,49 +76,86 @@ def reduce_to_nd(embeddings: torch.Tensor, dim: int=10) -> np.ndarray:
     embeddings_numpy = embeddings.numpy()
     n_samples = embeddings_numpy.shape[0]
 
-    dim = min(dim, n_samples - 1)
-    n_neighbors = min(15, n_samples - 1)
+    dim = max(1, min(dim, n_samples - 2))
+    n_neighbors = max(2, min(15, n_samples - 1))
     
     reducer = umap.UMAP(n_components=dim, n_neighbors=n_neighbors)
     embeddings_nd = reducer.fit_transform(embeddings_numpy)
     return embeddings_nd
 
-def fit_gmms_with_bic(data, max_components=10):
-    bic_scores = []
-    models = []
+def fit_gmms_with_bic(data, max_components=10, min_cluster_size=1, alpha=0.0):
+    n_samples = len(data)
+    upper_bound = min(n_samples, max_components)
 
-    for k in range(1, max_components + 1):
-        gmm = GaussianMixture(n_components=k, covariance_type='full', random_state=144)
+    candidates = []
+
+    def avg_cluster_distance(gmm: GaussianMixture) -> float:
+        centers = gmm.means_
+        if centers.shape[0] < 2:
+            return 0.0
+        dists = np.linalg.norm(centers[:, None, :] - centers[None, :, :], axis=-1)
+        upper_tri = dists[np.triu_indices_from(dists, k=1)]
+        return np.mean(upper_tri)
+
+    for k in range(1, upper_bound + 1):
+        gmm = GaussianMixture(
+            n_components=k, 
+            covariance_type='full', 
+            reg_covar=1e-3,
+            random_state=144
+        )
         gmm.fit(data)
 
+        labels = gmm.predict(data)
+        counts = np.bincount(labels)
+
+        if np.any(counts < min_cluster_size):
+            continue
+
         bic = gmm.bic(data)
+        dist = avg_cluster_distance(gmm)
+        hybrid_score = bic - dist * alpha
 
-        bic_scores.append(bic)
-        models.append(gmm)
+        candidates.append((hybrid_score, bic, dist, k, gmm))
     
-    bic_scores = np.array(bic_scores)
+    if not candidates:
+        raise ValueError("No valid GMM models found")
+    
+    candidates.sort(key=lambda x: (x[0], x[1]))
 
-    best_index = np.argmin(bic_scores)
-    best_model = models[best_index]
-    best_k = best_index + 1
+    best_score, best_bic, best_dist, best_k, best_model = candidates[0]
 
-    return best_model, best_k, bic_scores
+    plot_clusters(data, best_model.predict(data), best_model.means_)
 
+    return best_model, best_k, best_bic
 
-def plot_3d_map(embeddings_3d: np.ndarray, out_path="umap_scatter.png"):
-    fig = plt.figure()
-    ax = fig.add_subplot(projection="3d")
+def plot_clusters(data, labels, centers=None, title="GMM Clustering", save_path="cluster_plot3.png"):
+    plt.figure(figsize=(8, 6))
+    for label in np.unique(labels):
+        cluster_points = data[labels == label]
+        plt.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {label}', s=40, alpha=0.7)
+    
+    if centers is not None:
+        plt.scatter(centers[:, 0], centers[:, 1], color='black', marker='x', s=100, label='Centers')
+    
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(save_path)
+    print(f"Saved plot to: {save_path}")
 
-    x = embeddings_3d[:, 0]
-    y = embeddings_3d[:, 1]
-    z = embeddings_3d[:, 2]
-    colors = cm.plasma(np.linspace(0,1,len(x)))
+def analyze_clusters(results, data, model):
+    filepaths = [r['path'] for r in results]
+    labels = model.predict(data)
 
-    scatter = ax.scatter(x, y, z, c=colors, s=5)
+    sorted_indices = np.argsort(labels)
 
-    ax.set(title="W2V2 + UMAP 3D", xlabel="UMAP1", ylabel="UMAP2", zlabel="UMAP3")
-    cb = plt.colorbar(scatter, ax=ax, shrink=0.6, pad=0.1)
-    cb.set_label("Frame index")
+    sorted_labels = labels[sorted_indices]
+    sorted_paths = [filepaths[i] for i in sorted_indices]
 
-    plt.savefig(out_path, dpi=150, bbox_inches="tight")
-    print(f"Saved scatter to {out_path}")
+    current_cluster = None
+    for label, path in zip(sorted_labels, sorted_paths):
+        if label != current_cluster:
+            current_cluster = label
+            print(f"\nCluster {label}:")
+        print(f"  {os.path.basename(path)}")

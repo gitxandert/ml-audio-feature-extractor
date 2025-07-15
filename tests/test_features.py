@@ -26,12 +26,14 @@ def test_fit_gmms(dummy_audio_files):
     from extractor.features import stack_embeddings
     from extractor.features import reduce_to_nd
     stacked_results = stack_embeddings(results)
-    results_nd = reduce_to_nd(stacked_results, 10)
+    data = reduce_to_nd(stacked_results, 10)
 
-    print(f"Reduced embeddings shape: {results_nd[1].shape}")
+    print(f"Reduced embeddings shape: {data[1].shape}")
 
     from extractor.features import fit_gmms_with_bic
-    model, k, scores = fit_gmms_with_bic(results_nd)
+    model, k, scores = fit_gmms_with_bic(data)
 
     assert model.n_components == k
-    print(f"Predicted number of components: {k}")
+    
+    from extractor.features import analyze_clusters
+    analyze_clusters(results, data, model)

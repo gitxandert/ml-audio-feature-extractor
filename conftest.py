@@ -57,7 +57,7 @@ def gen_test_cases(count: int=10) -> dict[str, tuple[torch.Tensor, int]]:
 def dummy_audio_files():
     with tempfile.TemporaryDirectory() as tmpdir:
         filepaths = []
-        test_cases = gen_test_cases(20)
+        test_cases = gen_test_cases()
 
         for name, (waveform, sr) in test_cases.items():
             path = os.path.join(tmpdir, name)
