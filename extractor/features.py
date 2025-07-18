@@ -12,13 +12,24 @@ def load_model_once():
     model = bundle.get_model()
     return model
 
-def load_and_preprocess_waveform(path: str, target_sr: int = 16000) -> tuple[torch.Tensor, int]:
-    waveform, sample_rate = torchaudio.load(path)
+def load_and_preprocess_waveform(path: str, target_sr: int = 16000) -> torch.Tensor:
+    # get the waveform
+    waveform, sr = torchaudio.load(path)
+
+    # mix to mono
     if waveform.shape[0] > 1:
         waveform = waveform.mean(dim=0, keepdim=True)
-    if sample_rate != 16000:
-        resampler = torchaudio.transforms.Resample(sample_rate, 16000)
+
+    # resample
+    if sr != target_sr:
+        resampler = torchaudio.transforms.Resample(sr, target_sr)
         waveform = resampler(waveform)
+    
+    # normalize
+    max_val = waveform.abs().max()
+    if max_val > 0:
+        waveform = waveform / max_val
+    
     return waveform, target_sr
 
 def chunk_audio(waveform, sample_rate, chunk_duration=5.0, overlap=0.0):
