@@ -2,9 +2,9 @@ import torchaudio.pipelines
 import torch
 import numpy as np
 import umap
-import os, shutil
+import os, shutil, subprocess, tempfile, pickle
 import matplotlib.pyplot as plt
-
+from projections.projection_head import ProjectionHead
 from sklearn.mixture import GaussianMixture
 
 def load_model_once():
@@ -13,8 +13,26 @@ def load_model_once():
     return model
 
 def load_and_preprocess_waveform(path: str, target_sr: int = 16000) -> torch.Tensor:
+    print("     Loading and preprocessing...")
     # get the waveform
-    waveform, sr = torchaudio.load(path)
+    if path.endswith(".wav"):
+        waveform, sr = torchaudio.load(path)
+    else: # if not .wav...
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
+            tmp_path = tmp_wav.name
+        
+        # ... convert to .wav, resample to target_sr, and mix to mono
+        subprocess.run([
+            "ffmpeg", "-y", "-i", path,
+            "-ar", str(target_sr),
+            "-ac", "1",
+            tmp_path
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        waveform, sr = torchaudio.load(tmp_path)
+
+        # remove tmp_wav when finished
+        os.remove(tmp_path)
 
     # mix to mono
     if waveform.shape[0] > 1:
@@ -32,53 +50,91 @@ def load_and_preprocess_waveform(path: str, target_sr: int = 16000) -> torch.Ten
     
     return waveform, target_sr
 
-def chunk_audio(waveform, sample_rate, chunk_duration=5.0, overlap=0.0):
-    chunk_size = int(chunk_duration * sample_rate)
-    step_size = int((chunk_duration - overlap) * sample_rate)
+def get_diverse_chunks(waveform: torch.tensor, sample_rate: int = 16000, chunk_seconds: int = 5, k: int = 10, min_rms: float = 0.01) -> list[torch.Tensor]:
+    chunk_samples = sample_rate * chunk_seconds
+    total_samples = waveform.shape[-1]
 
+    print("     Chunking audio...")
     chunks = []
-    for start in range(0, waveform.shape[1] - chunk_size + 1, step_size):
-        chunk = waveform[:, start:start + chunk_size]
+    offset = 0
+    while offset + chunk_samples <= total_samples:
+        chunk = waveform[:, offset:offset + chunk_samples]
+        chunk_rms = (chunk ** 2).mean().sqrt().item()
+        
+        if chunk_rms >= min_rms:
+            chunks.append((chunk, chunk_rms))
+        
+        offset += chunk_samples
 
-        # pad chunk if not long enough
-        if chunk.shape[-1] < chunk_size:
-            pad_amount = chunk_size - chunk.shape[-1]
-            chunk = torch.nn.functional.pad(chunk, (0, pad_amount))
-
-        chunks.append(chunk)
-
-    return chunks
-
-def extract_embeddings(chunks: list[torch.Tensor], model: torchaudio.models.Wav2Vec2Model):
-    batch_tensor = torch.stack([c.squeeze(0) for c in chunks])
-
-    with torch.inference_mode():
-        out = model(batch_tensor)
+    if not chunks:
+        return []
     
-    features = out[0]
-    pooled = features.mean(dim=1)
-    return list(pooled)
+    chunks.sort(key=lambda x: x[1])
+    sorted_chunks = [c[0] for c in chunks]
 
-def aggregate_embeddings(embeddings: list[torch.Tensor]) -> torch.Tensor:
+    # always include softest and loudest
+    diverse_chunks = [sorted_chunks[0], sorted_chunks[-1]]
+
+    num_valid = len(sorted_chunks)
+    remaining = min(k - 2, num_valid - 2)
+
+    if remaining > 0:
+        step = max((num_valid - 2) // remaining, 1)
+        for i in range(1, remaining + 1):
+            idx = min(1 + i * step, num_valid - 2)
+            diverse_chunks.append(sorted_chunks[idx])
+
+    print(f"        Returning {remaining + 2} diverse chunks")
+    return diverse_chunks[:k]
+
+def extract_embeddings(chunks: list[torch.Tensor], encoder: torchaudio.models.Wav2Vec2Model, head: ProjectionHead):
+    print("     Extracting embeddings...")
+    with torch.no_grad():
+        batch = torch.stack([c.squeeze(0) for c in chunks])
+        features = encoder(batch)[0]
+        pooled = features.mean(dim=1)
+        projected = head(pooled).cpu()
+
+    return list(projected)
+
+def aggregate_embeddings(embeddings: list[np.ndarray]) -> np.ndarray:
+    print("     Aggregating embeddings...")
     return torch.stack(embeddings).mean(dim=0)
 
-def process_audio_files(filepaths):
-    model = load_model_once()
+def process_audio_files(data_dir, head_path):
+    print("\nLoading encoder")
+    encoder = load_model_once()
+    encoder.eval()
+
+    print("Loading head")
+    head = ProjectionHead()
+    head.load_state_dict(torch.load(head_path))
+    head.eval()
 
     results = []
+    filepaths = [os.path.join(data_dir, f) for f in os.listdir(data_dir)]
+
+    print(f"\nProcessing {len(filepaths)} files in {data_dir}")
     for path in filepaths:
+        print(f"    Processing {os.path.basename(path)}")
         waveform, sr = load_and_preprocess_waveform(path)
-        chunks = chunk_audio(waveform, sr)
-        embeddings = extract_embeddings(chunks, model)
+        chunks = get_diverse_chunks(waveform, sr, k=5)
+        embeddings = extract_embeddings(chunks, encoder, head)
         aggregate = aggregate_embeddings(embeddings)
         results.append({
             'path': path,
             'embeddings': aggregate,
         })
+        print(f"    Appended results with {os.path.basename(path)}'s embeddings")
     
+    with open("results.pkl", "wb") as f:
+        pickle.dump(results, f)
+
+    print(f"\nReturning {len(results)} embeddings")
     return results
 
 def stack_embeddings(results):
+    print("Stacking embeddings...")
     embeddings = [r['embeddings'] for r in results]
     return torch.stack(embeddings)
 
@@ -93,7 +149,8 @@ def reduce_to_nd(embeddings: torch.Tensor, dim: int=10) -> np.ndarray:
     embeddings_nd = reducer.fit_transform(embeddings_numpy)
     return embeddings_nd
 
-def plot_clusters(data, labels, centers=None, title="GMM Clustering", save_path="cluster_plot3.png"):
+def plot_clusters(data, labels, centers=None, title="GMM Clustering", save_path="cluster_plot.png"):
+    print("Plotting clusters...")
     plt.figure(figsize=(8, 6))
 
     colors = []
@@ -112,56 +169,39 @@ def plot_clusters(data, labels, centers=None, title="GMM Clustering", save_path=
     plt.savefig(save_path)
     print(f"Saved plot to: {save_path}")
 
-def fit_gmms_with_bic(data, max_components=10, min_cluster_size=1, alpha=0.0):
-    n_samples = len(data)
-    upper_bound = min(n_samples, max_components)
+def fit_gmms_with_hybrid_score(data, max_components=10, force=False, force_k=10):
+    print("Fitting GMMs...")
 
-    candidates = []
+    from sklearn.metrics import silhouette_score
 
-    def avg_cluster_distance(gmm: GaussianMixture) -> float:
-        centers = gmm.means_
-        if centers.shape[0] < 2:
-            return 0.0
-        dists = np.linalg.norm(centers[:, None, :] - centers[None, :, :], axis=-1)
-        upper_tri = dists[np.triu_indices_from(dists, k=1)]
-        return np.mean(upper_tri)
+    best_score = -1
+    best_k = 0
+    best_model = None
 
-    for k in range(1, upper_bound + 1):
-        gmm = GaussianMixture(
-            n_components=k, 
-            covariance_type='full',
-            random_state=144
-        )
-        gmm.fit(data)
+    scores = []
 
-        labels = gmm.predict(data)
-        counts = np.bincount(labels)
-
-        if np.any(counts < min_cluster_size):
-            continue
-
-        bic = gmm.bic(data)
-        dist = avg_cluster_distance(gmm)
-        hybrid_score = bic - dist * alpha
-
-        candidates.append((hybrid_score, bic, dist, k, gmm))
-    
-    if not candidates:
-        raise ValueError("No valid GMM models found")
-    
-    candidates.sort(key=lambda x: (x[0], x[1]))
-
-    best_score, best_bic, best_dist, best_k, best_model = candidates[0]
-
+    if force:
+        best_k = force_k
+        best_model = GaussianMixture(n_components=best_k).fit(data)
+    else:
+        for k in range(2, max_components + 1):
+            gmm = GaussianMixture(n_components=k).fit(data)
+            labels = gmm.predict(data)
+            score = silhouette_score(data, labels)
+            if score > best_score:
+                best_score = score
+                best_k = k
+                best_model = gmm
+            scores.append((k, score))
+        
+    labels = best_model.predict(data)
     plottable_data = umap.UMAP(n_components=2).fit_transform(data)
-    gmm = GaussianMixture(n_components=best_k).fit(plottable_data)
-    plottable_labels = gmm.predict(plottable_data)
-    plottable_centers = gmm.means_
-    plot_clusters(plottable_data, plottable_labels, centers=plottable_centers)
+    plot_clusters(plottable_data, labels)
 
-    return best_model, best_k, best_bic
+    return best_model, best_k, labels
 
 def cluster_files(filepaths, data, model, top_dir="clusters"):
+    print(f"Clustering files into {top_dir}")
     if os.path.exists(top_dir) and os.path.isdir(top_dir):
         shutil.rmtree(top_dir)
 
@@ -182,3 +222,27 @@ def cluster_files(filepaths, data, model, top_dir="clusters"):
             print(f"\nCluster {label}:")
         shutil.move(path, cluster_dir)
         print(f"  {os.path.basename(path)}")
+
+def open_pkl(pkl_path):
+    with open(pkl_path, "rb") as f:
+        results = pickle.load(f)
+    return results
+
+filepaths = "projections/training_data/music_domain_wavs"
+results = open_pkl("music_results.pkl")
+embeddings = stack_embeddings(results).numpy()
+
+model, k, labels = fit_gmms_with_hybrid_score(embeddings, force=True, force_k=17)
+
+sorted_indices = np.argsort(labels)
+sorted_labels = labels[sorted_indices]
+
+paths = np.array([r['path'] for r in results])
+sorted_paths = paths[sorted_indices]
+
+current_cluster = None
+for label, path in zip(sorted_labels, sorted_paths):
+    if label != current_cluster:
+        current_cluster = label
+        print(f"\nCluster {label}:")
+    print(f"  {os.path.basename(path)}")
