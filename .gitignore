@@ -58,4 +58,4 @@ docker-compose.override.yml
 home/vscode/.cache/pip/
 
 # Training data
-train_projection/training_data/
+projections/training_data/
