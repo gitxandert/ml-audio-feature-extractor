@@ -2,7 +2,7 @@ import torch
 import os, subprocess
 import random
 from extractor.features import load_model_once, load_and_preprocess_waveform, get_diverse_chunks
-from projection_head import ProjectionHead
+from projections.projection_head import ProjectionHead
 
 def sample_chunks(chunks, k):
     if len(chunks) <= k:
@@ -37,7 +37,7 @@ def train_head(data_dir, projection_path, batch_size=4, num_epochs=50, chunks_pe
 
 
         print("Getting chunks...")
-        chunks = get_diverse_chunks(waveform, sample_rate=sr)
+        chunks = get_diverse_chunks(waveform, sample_rate=sr, k=15)
 
         print("Appending chunks")
         chunkeds.append(chunks)
@@ -46,9 +46,9 @@ def train_head(data_dir, projection_path, batch_size=4, num_epochs=50, chunks_pe
     print("\n-------------------------------------------\n")
 
     best_loss = float('inf')
-    save_model = False
     for epoch in range(num_epochs):
         random.shuffle(chunkeds)
+        save_model = False
 
         for i in range(0, len(chunkeds), batch_size):
             batch = chunkeds[i:i + batch_size]
@@ -93,27 +93,36 @@ def train_head(data_dir, projection_path, batch_size=4, num_epochs=50, chunks_pe
                 best_loss = loss.item()
                 torch.save(head.cpu().state_dict(), projection_path)
                 save_model = True
-            else:
-                save_model = False
             
             loss.backward()
             optimizer.step()
 
         print(f"Epoch {epoch + 1}/{num_epochs} | Loss: {loss.item():.4f}")
-        if save_model:
+        if save_model == True:
             print(f"    Best loss updated; saving current model to {projection_path}")
 
     print("\n-------------------------------------------")
     print("\nTraining completed")
     print(f"Model with loss: {best_loss} saved to {projection_path}")
 
+import os
+import subprocess
+
+import os
+import shutil
+import subprocess
+
 def convert_to_wav(input_dir, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     for fname in os.listdir(input_dir):
-        if fname.endswith('.mp3'):
-            in_path = os.path.join(input_dir, fname)
-            out_path = os.path.join(output_dir, fname.replace('.mp3', '.wav'))
+        ext = os.path.splitext(fname)[1].lower()
+        in_path = os.path.join(input_dir, fname)
+        base_name = os.path.splitext(fname)[0]
+        out_path = os.path.join(output_dir, base_name + '.wav')
+
+        if ext in ('.mp3', '.m4a', '.aiff'):
             subprocess.run(['ffmpeg', '-y', '-i', in_path, out_path], check=True)
-
-
-train_head("train_projection/training_data/music_domain_wavs/", "music_head.pth")
+        elif ext == '.wav':
+            shutil.copy2(in_path, out_path)  # Preserves metadata and timestamps
+    
+train_head("projections/training_data/speech_domain_wavs/", "speech_head.pth")
