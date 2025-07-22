@@ -6,11 +6,32 @@ import os, shutil, subprocess, tempfile, pickle
 import matplotlib.pyplot as plt
 from projections.projection_head import ProjectionHead
 from sklearn.mixture import GaussianMixture
+from sklearn.preprocessing import normalize
 
 def load_model_once():
     bundle = torchaudio.pipelines.WAV2VEC2_BASE
     model = bundle.get_model()
-    return model
+    return model.eval()
+
+def load_head_and_centroid(name: str):
+    head = ProjectionHead()
+    head.load_state_dict(torch.load(f"projections/projections/{name}_head.pth"))
+    centroid = torch.load(f"projections/centroids/{name}_centroid.pt")
+    return head.eval(), centroid
+
+def load_heads_and_centroids():
+    heads = {}
+    centroids = {}
+
+    domains = ["music", "speech"]
+    # will add animal, environmental(/ambient), and artificial(/synthetic)
+
+    for domain in domains:
+        head, centroid = load_head_and_centroid(domain)
+        heads[domain] = head
+        centroids[domain] = centroid
+
+    return heads, centroids
 
 def load_and_preprocess_waveform(path: str, target_sr: int = 16000) -> torch.Tensor:
     print("     Loading and preprocessing...")
@@ -87,29 +108,41 @@ def get_diverse_chunks(waveform: torch.tensor, sample_rate: int = 16000, chunk_s
     print(f"        Returning {remaining + 2} diverse chunks")
     return diverse_chunks[:k]
 
-def extract_embeddings(chunks: list[torch.Tensor], encoder: torchaudio.models.Wav2Vec2Model, head: ProjectionHead):
+def extract_from_encoder(chunks: list[torch.Tensor], encoder: torchaudio.models.Wav2Vec2Model):
     print("     Extracting embeddings...")
     with torch.no_grad():
         batch = torch.stack([c.squeeze(0) for c in chunks])
         features = encoder(batch)[0]
         pooled = features.mean(dim=1)
-        projected = head(pooled).cpu()
 
-    return list(projected)
+    return pooled
+
+def extract_from_head(pooled: torch.Tensor, heads: dict[ProjectionHead], centroids: dict[torch.Tensor]):
+    best_domain = None
+    best_projected = []
+    best_dist = float('inf')
+
+    for domain, head in heads.items():
+        projected = head(pooled).cpu()
+        dist = torch.norm(projected.mean(dim=0) - centroids[domain])
+        if dist < best_dist:
+            best_domain = domain
+            best_projected = projected
+            best_dist = dist
+    
+    confidence = 1 / (1 + best_dist)
+    return best_domain, best_projected, confidence
 
 def aggregate_embeddings(embeddings: list[np.ndarray]) -> np.ndarray:
     print("     Aggregating embeddings...")
     return torch.stack(embeddings).mean(dim=0)
 
-def process_audio_files(data_dir, head_path):
+def process_audio_files(data_dir):
     print("\nLoading encoder")
     encoder = load_model_once()
-    encoder.eval()
 
-    print("Loading head")
-    head = ProjectionHead()
-    head.load_state_dict(torch.load(head_path))
-    head.eval()
+    print("Loading heads")
+    heads, centroids = load_heads_and_centroids()
 
     results = []
     filepaths = [os.path.join(data_dir, f) for f in os.listdir(data_dir)]
@@ -119,11 +152,14 @@ def process_audio_files(data_dir, head_path):
         print(f"    Processing {os.path.basename(path)}")
         waveform, sr = load_and_preprocess_waveform(path)
         chunks = get_diverse_chunks(waveform, sr, k=5)
-        embeddings = extract_embeddings(chunks, encoder, head)
+        pooled = extract_from_encoder(chunks, encoder)
+        domain, embeddings, confidence = extract_from_head(pooled, heads, centroids)
         aggregate = aggregate_embeddings(embeddings)
         results.append({
             'path': path,
             'embeddings': aggregate,
+            'domain': domain,
+            'confidence': confidence
         })
         print(f"    Appended results with {os.path.basename(path)}'s embeddings")
     
@@ -238,24 +274,28 @@ def open_pkl(pkl_path):
         results = pickle.load(f)
     return results
 
+
+
 # filepaths = "projections/training_data/speech_domain_wavs"
 # results = process_audio_files(filepaths, "projections/speech_head.pth")
 
-results = open_pkl("speech_results.pkl")
 
-embeddings = stack_embeddings(results).numpy()
 
-model, k, labels = fit_gmms_with_hybrid_score(embeddings, force=True, force_k=12)
+# results = open_pkl("speech_results.pkl")
 
-sorted_indices = np.argsort(labels)
-sorted_labels = labels[sorted_indices]
+# embeddings = stack_embeddings(results).numpy()
 
-paths = np.array([r['path'] for r in results])
-sorted_paths = paths[sorted_indices]
+# model, k, labels = fit_gmms_with_hybrid_score(embeddings, force=True, force_k=12)
 
-current_cluster = None
-for label, path in zip(sorted_labels, sorted_paths):
-    if label != current_cluster:
-        current_cluster = label
-        print(f"\nCluster {label}:")
-    print(f"  {os.path.basename(path)}")
+# sorted_indices = np.argsort(labels)
+# sorted_labels = labels[sorted_indices]
+
+# paths = np.array([r['path'] for r in results])
+# sorted_paths = paths[sorted_indices]
+
+# current_cluster = None
+# for label, path in zip(sorted_labels, sorted_paths):
+#     if label != current_cluster:
+#         current_cluster = label
+#         print(f"\nCluster {label}:")
+#     print(f"  {os.path.basename(path)}")
