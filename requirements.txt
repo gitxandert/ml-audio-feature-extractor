@@ -6,3 +6,4 @@ librosa
 torchaudio
 torch
 umap-learn>=0.5.8
+faiss-cpu
