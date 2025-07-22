@@ -151,20 +151,27 @@ def reduce_to_nd(embeddings: torch.Tensor, dim: int=10) -> np.ndarray:
 
 def plot_clusters(data, labels, centers=None, title="GMM Clustering", save_path="cluster_plot.png"):
     print("Plotting clusters...")
-    plt.figure(figsize=(8, 6))
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(projection='3d')
 
     colors = []
     for label in np.unique(labels):
         cluster_points = data[labels == label]
-        scatter = plt.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {label}', s=40, alpha=0.7)
-        new_color = scatter.get_facecolor()
+        x = cluster_points[:, 0]
+        y = cluster_points[:, 1]
+        z = cluster_points[:, 2]
+        scatter = ax.scatter(x, y, z, label=f'Cluster {label}', s=40, alpha=0.7)
+        new_color = scatter.get_facecolor()[0]
         colors.append(new_color)
     
     if centers is not None:
-        plt.scatter(centers[:, 0], centers[:, 1], c=colors, marker='x', s=100, label='Centers')
+        ax.scatter(centers[:, 0], centers[:, 1], centers[:, 2], c=colors, marker='x', s=100, label='Centers')
     
-    plt.title(title)
-    plt.legend()
+    ax.legend()
+    ax.set_title(title)
+    ax.set_xlabel("Dim 1")
+    ax.set_ylabel("Dim 2")
+    ax.set_zlabel("Dim 3")
     plt.tight_layout()
     plt.savefig(save_path)
     print(f"Saved plot to: {save_path}")
@@ -195,44 +202,50 @@ def fit_gmms_with_hybrid_score(data, max_components=10, force=False, force_k=10)
             scores.append((k, score))
         
     labels = best_model.predict(data)
-    plottable_data = umap.UMAP(n_components=2).fit_transform(data)
-    plot_clusters(plottable_data, labels)
+
+    reducer = umap.UMAP(n_components=3, random_state=144)
+    plottable_data = reducer.fit_transform(data)
+    plottable_centers = reducer.transform(best_model.means_)
+    plot_clusters(plottable_data, labels, centers=plottable_centers)
 
     return best_model, best_k, labels
 
-def cluster_files(filepaths, data, model, top_dir="clusters"):
-    print(f"Clustering files into {top_dir}")
-    if os.path.exists(top_dir) and os.path.isdir(top_dir):
-        shutil.rmtree(top_dir)
+# def cluster_files(filepaths, data, model, top_dir="clusters"):
+#     print(f"Clustering files into {top_dir}")
+#     if os.path.exists(top_dir) and os.path.isdir(top_dir):
+#         shutil.rmtree(top_dir)
 
-    labels = model.predict(data)
+#     labels = model.predict(data)
 
-    sorted_indices = np.argsort(labels)
+#     sorted_indices = np.argsort(labels)
 
-    sorted_labels = labels[sorted_indices]
-    sorted_paths = [filepaths[i] for i in sorted_indices]
+#     sorted_labels = labels[sorted_indices]
+#     sorted_paths = [filepaths[i] for i in sorted_indices]
 
-    current_cluster = None
-    cluster_dir = None
-    for label, path in zip(sorted_labels, sorted_paths):
-        if label != current_cluster:
-            current_cluster = label
-            cluster_dir = os.path.join(top_dir, f"{label}")
-            os.makedirs(cluster_dir, exist_ok=True)
-            print(f"\nCluster {label}:")
-        shutil.move(path, cluster_dir)
-        print(f"  {os.path.basename(path)}")
+#     current_cluster = None
+#     cluster_dir = None
+#     for label, path in zip(sorted_labels, sorted_paths):
+#         if label != current_cluster:
+#             current_cluster = label
+#             cluster_dir = os.path.join(top_dir, f"{label}")
+#             os.makedirs(cluster_dir, exist_ok=True)
+#             print(f"\nCluster {label}:")
+#         shutil.move(path, cluster_dir)
+#         print(f"  {os.path.basename(path)}")
 
 def open_pkl(pkl_path):
     with open(pkl_path, "rb") as f:
         results = pickle.load(f)
     return results
 
-filepaths = "projections/training_data/music_domain_wavs"
-results = open_pkl("music_results.pkl")
+# filepaths = "projections/training_data/speech_domain_wavs"
+# results = process_audio_files(filepaths, "projections/speech_head.pth")
+
+results = open_pkl("speech_results.pkl")
+
 embeddings = stack_embeddings(results).numpy()
 
-model, k, labels = fit_gmms_with_hybrid_score(embeddings, force=True, force_k=17)
+model, k, labels = fit_gmms_with_hybrid_score(embeddings, force=True, force_k=12)
 
 sorted_indices = np.argsort(labels)
 sorted_labels = labels[sorted_indices]
