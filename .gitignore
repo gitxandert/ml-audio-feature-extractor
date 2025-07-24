@@ -57,5 +57,6 @@ docker-compose.override.yml
 # Custom pip cache volume
 home/vscode/.cache/pip/
 
-# Training data
+# Audio
 projections/training_data/
+tests/audio/
