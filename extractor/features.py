@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from projections.projection_head import ProjectionHead
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import normalize
+from indexer.faiss_indexer import build_faiss_index, load_faiss_index, save_faiss_index, search_faiss_index
+from indexer.metadata import insert_metadata_rows, get_metadata_by_id
 
 def load_model_once():
     bundle = torchaudio.pipelines.WAV2VEC2_BASE
@@ -69,7 +71,9 @@ def load_and_preprocess_waveform(path: str, target_sr: int = 16000) -> torch.Ten
     if max_val > 0:
         waveform = waveform / max_val
     
-    return waveform, target_sr
+    total_duration = waveform.shape[-1] / sr
+    
+    return waveform, target_sr, total_duration
 
 def get_diverse_chunks(waveform: torch.tensor, sample_rate: int = 16000, chunk_seconds: int = 5, k: int = 10, min_rms: float = 0.01) -> list[torch.Tensor]:
     chunk_samples = sample_rate * chunk_seconds
@@ -83,15 +87,19 @@ def get_diverse_chunks(waveform: torch.tensor, sample_rate: int = 16000, chunk_s
         chunk_rms = (chunk ** 2).mean().sqrt().item()
         
         if chunk_rms >= min_rms:
-            chunks.append((chunk, chunk_rms))
+            chunks.append({
+                'embeddings': chunk,
+                'rms': chunk_rms,
+                'start_time': offset / sample_rate
+            })
         
         offset += chunk_samples
 
     if not chunks:
-        return []
+        return [], []
     
-    chunks.sort(key=lambda x: x[1])
-    sorted_chunks = [c[0] for c in chunks]
+    chunks.sort(key=lambda x: x['rms'])
+    sorted_chunks = [(c['embeddings'], c['start_time']) for c in chunks]
 
     # always include softest and loudest
     diverse_chunks = [sorted_chunks[0], sorted_chunks[-1]]
@@ -106,7 +114,10 @@ def get_diverse_chunks(waveform: torch.tensor, sample_rate: int = 16000, chunk_s
             diverse_chunks.append(sorted_chunks[idx])
 
     print(f"        Returning {remaining + 2} diverse chunks")
-    return diverse_chunks[:k]
+
+    embeddings = [chunk for chunk, _ in diverse_chunks]
+    start_times = [start for _, start in diverse_chunks]
+    return embeddings, start_times
 
 def extract_from_encoder(chunks: list[torch.Tensor], encoder: torchaudio.models.Wav2Vec2Model):
     print("     Extracting embeddings...")
@@ -133,10 +144,6 @@ def extract_from_head(pooled: torch.Tensor, heads: dict[ProjectionHead], centroi
     confidence = 1 / (1 + best_dist)
     return best_domain, best_projected, confidence
 
-def aggregate_embeddings(embeddings: list[np.ndarray]) -> np.ndarray:
-    print("     Aggregating embeddings...")
-    return torch.stack(embeddings).mean(dim=0)
-
 def process_audio_files(data_dir):
     print("\nLoading encoder")
     encoder = load_model_once()
@@ -150,16 +157,19 @@ def process_audio_files(data_dir):
     print(f"\nProcessing {len(filepaths)} files in {data_dir}")
     for path in filepaths:
         print(f"    Processing {os.path.basename(path)}")
-        waveform, sr = load_and_preprocess_waveform(path)
-        chunks = get_diverse_chunks(waveform, sr, k=5)
+        waveform, sr, file_duration = load_and_preprocess_waveform(path)
+        chunks, start_times = get_diverse_chunks(waveform, sr, k=5)
+        print(f"    len chunks = {len(chunks)}")
+        print(f"    len start_times = {len(start_times)}")
         pooled = extract_from_encoder(chunks, encoder)
         domain, embeddings, confidence = extract_from_head(pooled, heads, centroids)
-        aggregate = aggregate_embeddings(embeddings)
+        print(f"    embeddings.shape = {embeddings.shape}")
         results.append({
             'path': path,
-            'embeddings': aggregate,
+            'file_duration': file_duration,
+            'embeddings': embeddings,
             'domain': domain,
-            'confidence': confidence
+            'start_times': start_times
         })
         print(f"    Appended results with {os.path.basename(path)}'s embeddings")
     
@@ -169,10 +179,30 @@ def process_audio_files(data_dir):
     print(f"\nReturning {len(results)} embeddings")
     return results
 
-def stack_embeddings(results):
-    print("Stacking embeddings...")
-    embeddings = [r['embeddings'] for r in results]
-    return torch.stack(embeddings)
+def create_faiss_index(embeddings):
+    index = build_faiss_index(embeddings)
+    save_faiss_index(index, "data/index.faiss")
+
+def create_metadata_rows(results):
+    id = 0
+    rows = []
+
+    for r in results:
+        num_chunks = r['embeddings'].shape[0]
+        for e in range(num_chunks):
+            row = {
+                "id": id,
+                "file_path": r['path'],
+                'start_time': r['start_times'][e],
+                'duration': r['file_duration'],
+                'domain': r['domain']
+                # 'cluster'
+                # 'caption'
+            }
+            rows.append(row)
+            id += 1
+    
+    return rows
 
 def reduce_to_nd(embeddings: torch.Tensor, dim: int=10) -> np.ndarray:
     embeddings_numpy = embeddings.numpy()
@@ -275,27 +305,16 @@ def open_pkl(pkl_path):
     return results
 
 
+""""""
 
-# filepaths = "projections/training_data/speech_domain_wavs"
-# results = process_audio_files(filepaths, "projections/speech_head.pth")
+results = open_pkl("mixed_results.pkl")
 
+embeddings = torch.cat([r['embeddings'] for r in results], dim=0).detach().cpu().numpy()
+create_faiss_index(embeddings)
 
+db = "data/metadata.sqlite"
+rows = create_metadata_rows(results)
+insert_metadata_rows(db, rows)
+row = get_metadata_by_id(db, 27)
 
-# results = open_pkl("speech_results.pkl")
-
-# embeddings = stack_embeddings(results).numpy()
-
-# model, k, labels = fit_gmms_with_hybrid_score(embeddings, force=True, force_k=12)
-
-# sorted_indices = np.argsort(labels)
-# sorted_labels = labels[sorted_indices]
-
-# paths = np.array([r['path'] for r in results])
-# sorted_paths = paths[sorted_indices]
-
-# current_cluster = None
-# for label, path in zip(sorted_labels, sorted_paths):
-#     if label != current_cluster:
-#         current_cluster = label
-#         print(f"\nCluster {label}:")
-#     print(f"  {os.path.basename(path)}")
+print(row)
