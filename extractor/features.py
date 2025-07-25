@@ -9,6 +9,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import normalize
 from indexer.faiss_indexer import build_faiss_index, load_faiss_index, save_faiss_index, search_faiss_index
 from indexer.metadata import insert_metadata_rows, get_metadata_by_id
+from captioning.captions import load_conette_model, caption_audio
 
 def load_model_once():
     bundle = torchaudio.pipelines.WAV2VEC2_BASE
@@ -151,6 +152,9 @@ def process_audio_files(data_dir):
     print("Loading heads")
     heads, centroids = load_heads_and_centroids()
 
+    print("Loading CoNeTTE")
+    captioner = load_conette_model()
+
     results = []
     filepaths = [os.path.join(data_dir, f) for f in os.listdir(data_dir)]
 
@@ -159,17 +163,16 @@ def process_audio_files(data_dir):
         print(f"    Processing {os.path.basename(path)}")
         waveform, sr, file_duration = load_and_preprocess_waveform(path)
         chunks, start_times = get_diverse_chunks(waveform, sr, k=5)
-        print(f"    len chunks = {len(chunks)}")
-        print(f"    len start_times = {len(start_times)}")
         pooled = extract_from_encoder(chunks, encoder)
         domain, embeddings, confidence = extract_from_head(pooled, heads, centroids)
-        print(f"    embeddings.shape = {embeddings.shape}")
+        caption = caption_audio(path, captioner)
         results.append({
             'path': path,
             'file_duration': file_duration,
             'embeddings': embeddings,
             'domain': domain,
-            'start_times': start_times
+            'start_times': start_times,
+            'caption': caption
         })
         print(f"    Appended results with {os.path.basename(path)}'s embeddings")
     
@@ -195,9 +198,9 @@ def create_metadata_rows(results):
                 "file_path": r['path'],
                 'start_time': r['start_times'][e],
                 'duration': r['file_duration'],
-                'domain': r['domain']
+                'domain': r['domain'],
+                'caption': r['caption']
                 # 'cluster'
-                # 'caption'
             }
             rows.append(row)
             id += 1
@@ -306,8 +309,11 @@ def open_pkl(pkl_path):
 
 
 """"""
+print("Metadata Query CLI")
+print("Loading metadata...")
 
-results = open_pkl("mixed_results.pkl")
+# results = process_audio_files("tests/audio")
+results = open_pkl("pkls/captioned_results.pkl")
 
 embeddings = torch.cat([r['embeddings'] for r in results], dim=0).detach().cpu().numpy()
 create_faiss_index(embeddings)
@@ -315,6 +321,37 @@ create_faiss_index(embeddings)
 db = "data/metadata.sqlite"
 rows = create_metadata_rows(results)
 insert_metadata_rows(db, rows)
-row = get_metadata_by_id(db, 27)
 
-print(row)
+print("\nID numbers correspond to chunks of audio.")
+print("Enter ID number (int), or 'q'/'quit'/'exit' to quit.")
+
+while True:
+    user_input = input("\nEnter id: ")
+
+    if user_input.lower() in {"q", "quit", "exit"}:
+        print("\nClosing application.")
+        break
+
+    if not user_input.isdigit():
+        print("Invalid input; enter a numeric ID.")
+        continue
+
+    id_num = int(user_input)
+
+    if id_num >= len(rows):
+        print(f"No metadata for ID {id_num}")
+    else:
+        row = get_metadata_by_id(db, id_num)
+        name = os.path.basename(row['file_path'])
+        start = row['start_time']
+        file_duration = row['duration']
+        domain = row['domain']
+        cluster = row['cluster']
+        caption = row['caption']
+
+        print(f"Results for ID {id_num}:")
+        print(f"    File: {name}")
+        print(f"    Duration: {file_duration}")
+        print(f"    Chunk start time: {start}")
+        print(f"    Domain: {domain}")
+        print(f"    Caption: {caption}")
