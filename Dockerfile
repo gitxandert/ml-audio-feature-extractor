@@ -14,7 +14,8 @@ WORKDIR /app
 COPY requirements.txt requirements-dev.txt ./
 RUN pip install "numpy<2.0" && \
     pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+    pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt && \
+    python -m spacy download en_core_web_sm
 COPY . .
 CMD ["python", "main.py"]
 
