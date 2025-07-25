@@ -2,7 +2,7 @@
     "name": "ml-audio-feature-extractor",
     "image": "ml-audio-extractor-dev",
     "settings": {
-        "python.defaultInterpreterPath": "usr/local/bin/python",
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
         "terminal.integrated.defaultProfile.linux": "bash"
     },
     "extensions": [

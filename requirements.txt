@@ -1,9 +1,12 @@
-numpy
+numpy<2.0
 scipy
 matplotlib
 scikit-learn
 librosa
-torchaudio
-torch
+torchaudio==2.1.0
+torch==2.1.0
+torchlibrosa==0.1.0
 umap-learn>=0.5.8
+transformers==4.36.2
 faiss-cpu
+conette

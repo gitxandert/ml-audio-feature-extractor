@@ -1,4 +1,4 @@
-ARG PY_TAG=3.13-slim-bullseye         # or 3.13-slim once Docker is updated
+ARG PY_TAG=3.10-slim
 FROM python:${PY_TAG} as base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -9,23 +9,12 @@ RUN apt-get update && \
         gcc g++ git ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
-# ---- build wheels --------------------------------------------
-FROM base AS build
-WORKDIR /tmp
-COPY requirements.txt requirements-dev.txt /tmp/
-ENV PIP_CACHE_DIR=/tmp/pip-cache
-RUN pip install --upgrade pip && \
-    pip wheel --cache-dir=$PIP_CACHE_DIR --wheel-dir /wheels \
-        -r requirements.txt \
-        -r requirements-dev.txt && \
-    rm requirements*.txt
-
-
-# ---- final image ---------------------------------------------
 FROM base
 WORKDIR /app
-COPY --from=build /wheels /wheels
-RUN pip install --cache-dir=$PIP_CACHE_DIR /wheels/*.whl
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install "numpy<2.0" && \
+    pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
 COPY . .
 CMD ["python", "main.py"]
 
