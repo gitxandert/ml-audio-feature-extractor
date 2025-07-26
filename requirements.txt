@@ -10,3 +10,6 @@ umap-learn>=0.5.8
 transformers==4.36.2
 faiss-cpu
 conette
+langchain
+langchain-core
+langchain-ollama
