@@ -10,6 +10,8 @@ Other metadata, such as file duration and audio domain (music, speech, etc.), ar
 
 Files can be grouped via unsupervised clustering with automatic cluster count estimation, or by forcing files into a user-specified number of clusters. Files can also be returned to the user in a clusters/ directory, with each file sorted into a cluster-n/ subdirectory.
 
+When files are clustered, their captions are sent to Mistral, which summarizes the cluster based on the captions and assigns the cluster a generic title. Users will be able to take in at a glance how the program has decided to cluster their files and will be able to query the program about these files more easily, based on the text that has been assigned to them.
+
 The animation below depicts how the program sorts UMAP-reduced audio embeddings in time by semantic similarity.
 
 ![UMAP animation](media/embedding_animation.gif)
@@ -21,3 +23,7 @@ The 2D plot below shows how a Gaussian Mixture Model (GMM) works with the Bayesi
 Users can force clustering for more noisy, high-level, and largely-populated sets of audio files. The plot below shows how 100 speech files were forced into 12 distinct clusters.
 
 ![Forced clustering plot](media/forced_clustering.png)
+
+Metadata is stored in a FAISS index and SQLite database, which can be queried by ID numbers corresponding to chunked embeddings. The image below shows different files of human speech have been sorted into the speech domain, assigned a cluster, given captions, and queried by ID number in a CLI tool.
+
+![CLI example of metadata querying](media/cli_screenshot.png)
