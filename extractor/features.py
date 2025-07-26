@@ -68,7 +68,7 @@ def load_and_preprocess_waveform(path: str, target_sr: int = 16000) -> torch.Ten
     if max_val > 0:
         waveform = waveform / max_val
     
-    total_duration = waveform.shape[-1] / sr
+    total_duration = waveform.shape[-1] / target_sr
     
     return waveform, target_sr, total_duration
 
@@ -210,15 +210,15 @@ def open_pkl(pkl_path):
 
 
 """"""
-print("Metadata Query CLI")
-print("Loading metadata...")
-
 # results = process_audio_files("tests/audio")
 results = open_pkl("pkls/captioned_results.pkl")
 
 clustered_results = cluster_results(results)
-flat_results = [cr for cluster in clustered_results for cr in cluster]
 
+print("Metadata Query CLI")
+print("Loading metadata...")
+
+flat_results = [cr for cluster in clustered_results for cr in cluster]
 embeddings = torch.cat([fr['embeddings'] for fr in flat_results], dim=0).detach().cpu().numpy()
 create_faiss_index(embeddings)
 
