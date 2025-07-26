@@ -24,6 +24,6 @@ Users can force clustering for more noisy, high-level, and largely-populated set
 
 ![Forced clustering plot](media/forced_clustering.png)
 
-Metadata is stored in a FAISS index and SQLite database, which can be queried by ID numbers corresponding to chunked embeddings. The image below shows different files of human speech have been sorted into the speech domain, assigned a cluster, given captions, and queried by ID number in a CLI tool.
+Metadata is stored in a FAISS index and SQLite database, which can be queried by ID numbers corresponding to chunked embeddings. The image below shows how various files have been sorted into domains, assigned clusters, given captions, and queried by ID number in a CLI tool.
 
 ![CLI example of metadata querying](media/cli_screenshot.png)
