@@ -4,7 +4,7 @@ import umap
 from collections import defaultdict
 import matplotlib as plt
 from sklearn.mixture import GaussianMixture
-from llmquery.langchain import get_llm, generalize_cluster
+from llmquery.nl_processing import generalize_cluster
 
 def plot_clusters(data, labels, centers=None, title="GMM Clustering", save_path="cluster_plot.png"):
     print("Plotting clusters...")
@@ -132,12 +132,11 @@ def cluster_results(results):
     domains = defaultdict(list)
     for r in results:
         domains[r['domain']].append(r)
-    
-    llm = get_llm()
+
     clustered_results = []
     for domain, domain_results in domains.items():
         print(f"Clustering {domain} files...")
-        clustered_domain = assign_clusters(domain_results, llm)
+        clustered_domain = assign_clusters(domain_results)
         print((f"Returning clustered {domain} files."))
         clustered_results.extend(clustered_domain)
 
