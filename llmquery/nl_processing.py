@@ -2,21 +2,25 @@ from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 import ast
 
-def get_llm():
-    llm = ChatOllama(
-        base_url="http://localhost:11434",
-        model='mistral',
-        temperature=0
-    )
+class LLM:
+    __llm = None
 
-    return llm
+    @staticmethod
+    def get_llm():
+        if LLM.__llm == None:
+            LLM.__llm = ChatOllama(
+            base_url="http://localhost:11434",
+            model='mistral',
+            temperature=0
+        )
+        return LLM.__llm
 
-def generalize_cluster(captions: list[str], model: ChatOllama):
+def generalize_cluster(captions: list[str]):
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                """You are an imaginative assistant who concisely-summarizes descriptions of audio. 
+                """You are an imaginative assistant who concisely summarizes descriptions of audio. 
                 You are receiving a collection of descriptions.
                 Each of these descriptions corresponds to different audio,
                 but all of the audio is related.
@@ -30,6 +34,8 @@ def generalize_cluster(captions: list[str], model: ChatOllama):
             ("human", "{input}"),
         ]
     )
+
+    model = LLM.get_llm()
 
     chain = prompt | model
     result = chain.invoke(
