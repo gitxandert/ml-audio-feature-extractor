@@ -6,6 +6,7 @@ from extractor.clustering import cluster_results
 from indexer.faiss_indexer import build_faiss_index, load_faiss_index, save_faiss_index, search_faiss_index
 from indexer.metadata import insert_metadata_rows, get_metadata_by_id
 from captioning.captions import load_conette_model, caption_audio
+from llmquery.router_chain import route_query
 
 def load_model_once():
     bundle = torchaudio.pipelines.WAV2VEC2_BASE
@@ -211,13 +212,16 @@ def open_pkl(pkl_path):
 
 """"""
 # results = process_audio_files("tests/audio")
-results = open_pkl("pkls/captioned_results.pkl")
+# results = open_pkl("pkls/captioned_results.pkl")
 
-clustered_results = cluster_results(results)
+# clustered_results = cluster_results(results)
+# with open("clustered_results.pkl", "wb") as f:
+#     pickle.dump(clustered_results, f)
 
 print("Metadata Query CLI")
 print("Loading metadata...")
 
+clustered_results = open_pkl("pkls/clustered_results.pkl")
 flat_results = [cr for cluster in clustered_results for cr in cluster]
 embeddings = torch.cat([fr['embeddings'] for fr in flat_results], dim=0).detach().cpu().numpy()
 create_faiss_index(embeddings)
@@ -226,37 +230,14 @@ db = "data/metadata.sqlite"
 rows = create_metadata_rows(flat_results)
 insert_metadata_rows(db, rows)
 
-print("\nID numbers correspond to chunks of audio.")
-print("Enter ID number (int), or 'q'/'quit'/'exit' to quit.")
+print("\nAsk a question!")
 
 while True:
-    user_input = input("\nEnter id: ")
+    user_input = input("\nQ: ")
 
     if user_input.lower() in {"q", "quit", "exit"}:
         print("\nClosing application.")
         break
 
-    if not user_input.isdigit():
-        print("Invalid input; enter a numeric ID.")
-        continue
-
-    id_num = int(user_input)
-
-    if id_num >= len(rows):
-        print(f"No metadata for ID {id_num}")
-    else:
-        row = get_metadata_by_id(db, id_num)
-        name = os.path.basename(row['file_path'])
-        start = row['start_time']
-        file_duration = row['duration']
-        domain = row['domain']
-        cluster = row['cluster']
-        caption = row['caption']
-
-        print(f"Results for ID {id_num}:")
-        print(f"    File: {name}")
-        print(f"    Duration: {file_duration}")
-        print(f"    Chunk start time: {start}")
-        print(f"    Domain: {domain}")
-        print(f"    Cluster: {cluster}")
-        print(f"    Caption: {caption}")
+    response = route_query(user_input)
+    print(response)
