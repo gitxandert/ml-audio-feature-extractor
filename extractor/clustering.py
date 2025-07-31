@@ -4,7 +4,7 @@ import umap
 from collections import defaultdict
 import matplotlib as plt
 from sklearn.mixture import GaussianMixture
-from llmquery.nl_processing import generalize_cluster
+from llmquery.nl_processing import generalize_cluster, LLM
 
 def plot_clusters(data, labels, centers=None, title="GMM Clustering", save_path="cluster_plot.png"):
     print("Plotting clusters...")
@@ -89,12 +89,12 @@ def fit_gmms(data, max_components=10, force=False, force_k=10):
     print("Returning GMM labels.")
     return labels
 
-def generate_labels(cluster, llm):
+def generate_labels(cluster):
     print("Generating semantic labels...")
     current_captions = [c['caption'] for c in cluster]
 
     # send captions to Mistral to obtain title and summary
-    summary = generalize_cluster(current_captions, llm)
+    summary = generalize_cluster(current_captions)
 
     # add title as 'cluster' to each result in current cluster
     generated_label = summary['title']
@@ -104,7 +104,7 @@ def generate_labels(cluster, llm):
     print("Returning labelled cluster.")
     return cluster
 
-def assign_clusters(domain_results, llm):
+def assign_clusters(domain_results):
     print("Assigning clusters...")
     # collect embeddings from results
     domain_embeddings = [dr['embeddings'] for dr in domain_results]
@@ -120,7 +120,7 @@ def assign_clusters(domain_results, llm):
     
     clustered_domain = []
     for label in sorted(clusters.keys()):
-        labeled_cluster = generate_labels(clusters[label], llm)
+        labeled_cluster = generate_labels(clusters[label])
         clustered_domain.append(labeled_cluster)
 
     print("Returning clustered domain.")
