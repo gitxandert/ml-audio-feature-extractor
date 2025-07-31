@@ -1,7 +1,9 @@
 import sqlite3
+import os
 from langchain_core.prompts import PromptTemplate
+from langchain_core.messages import HumanMessage
 
-from nl_processing import LLM
+from llmquery.nl_processing import LLM
 
 CAPTION_PROMPT = PromptTemplate.from_template("""
 You are helping search audio files based on their descriptions.
@@ -24,19 +26,35 @@ fishsounds.wav: "Fish are splashing in the water"
 birdsounds.wav                                             
 """)
 
-def handle_caption_query(query: str):
-    conn = sqlite3.connect("data/metadata.sqlite")
-    cursor = conn.cursor()
-    cursor.execute("SELECT file_path, caption FROM metadata")
-    rows = cursor.fetchall()
-    conn.close()
+class CaptionedFiles:
+    __captioned_files = None
 
-    captioned_files = "\n".join(
-        f"{file_path}: {caption}"
-        for file_path, caption in rows
-        if caption
-    )
+    @staticmethod
+    def get_captioned_files():
+        if CaptionedFiles.__captioned_files == None:
+            CaptionedFiles.__captioned_files = CaptionedFiles.get_files_from_metadata()
+        return CaptionedFiles.__captioned_files
 
+    @staticmethod
+    def get_files_from_metadata():
+        conn = sqlite3.connect("data/metadata.sqlite")
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_path, caption FROM metadata")
+        rows = cursor.fetchall()
+        conn.close()
+
+        curstr = None
+        captioned_files = []
+        for fp, cap in rows:
+            capped_file = f"{os.path.basename(fp)}: {cap}"
+            if capped_file != curstr:
+                curstr = capped_file
+                captioned_files.append(curstr)
+
+        return "\n".join(cf for cf in captioned_files)
+
+def handle_caption_query(query: HumanMessage):
+    captioned_files = CaptionedFiles.get_captioned_files()
     llm = LLM.get_llm()
 
     chain = CAPTION_PROMPT | llm

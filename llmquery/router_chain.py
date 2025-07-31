@@ -1,12 +1,14 @@
 from langchain.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.router import RouterRunnable
+from langchain_core.messages import AIMessage
+from langchain_core.messages import HumanMessage
 
-from langchain_ollama import ChatOllama
+from llmquery.nl_processing import LLM
 
-from handlers.sql_handler import handle_sql_query
-from handlers.caption_handler import handle_caption_query
-from handlers.embedding_handler import handle_embedding_query
+from llmquery.handlers.sql_handler import handle_sql_query
+from llmquery.handlers.caption_handler import handle_caption_query
+from llmquery.handlers.embedding_handler import handle_embedding_query
 
 from functools import partial
 
@@ -26,7 +28,7 @@ Question: {input}
 Route:
 """)
 
-def route_query(query: str, llm: ChatOllama, embedding: np.ndarray = None):
+def route_query(query: str, embedding: np.ndarray = None):
     routes = {
         "sql": RunnableLambda(handle_sql_query),
         "caption": RunnableLambda(handle_caption_query),
@@ -34,11 +36,17 @@ def route_query(query: str, llm: ChatOllama, embedding: np.ndarray = None):
     }
 
     router = RouterRunnable(runnables=routes)
+    llm = LLM.get_llm()
 
-    router_chain = ROUTER_PROMPT | llm | (lambda x: x.strip().lower())
+    router_chain = ROUTER_PROMPT | llm
 
-    query_router = router_chain | router
+    message = [HumanMessage(query)]
 
-    result = query_router.invoke({"input": query})
+    route_key = router_chain.invoke({"input": message})
 
-    return result
+    formatted_key = route_key.content.replace(" ", "")
+    print(f"Route key = {formatted_key}")
+    
+    query_router = router.invoke({"key": formatted_key, "input": message})
+
+    return query_router.content

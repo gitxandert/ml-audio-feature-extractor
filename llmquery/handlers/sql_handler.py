@@ -1,10 +1,11 @@
-from langchain_ollama import ChatOllama
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain import hub
 from langgraph.prebuilt import create_react_agent
 
-from nl_processing import LLM
+from langchain_core.messages import HumanMessage
+
+from llmquery.nl_processing import LLM
 
 class SQLAgent:
     __executor = None
@@ -23,11 +24,11 @@ class SQLAgent:
         return agent_executor
 
     @staticmethod
-    def invoke(query: str):
+    def invoke(query: HumanMessage):
         if SQLAgent.__executor == None:
             SQLAgent.__executor = SQLAgent.build_sql_agent()
         return SQLAgent.__executor.invoke({"input": query})
 
-def handle_sql_query(query: str):
+def handle_sql_query(query: HumanMessage):
     result = SQLAgent.invoke(query)
     return result

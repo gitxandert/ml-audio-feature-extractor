@@ -1,6 +1,7 @@
 import numpy as np
 from indexer.metadata import get_metadata_by_id
 from indexer.faiss_indexer import load_faiss_index, search_faiss_index
+from langchain_core.messages import HumanMessage
 
 class FAISSIndex:
     __index = None
@@ -11,7 +12,7 @@ class FAISSIndex:
             FAISSIndex.__index = load_faiss_index("data/index.faiss")
         return FAISSIndex.__index
 
-def handle_embedding_query(query: str, embeddings: np.ndarray):
+def handle_embedding_query(query: HumanMessage, embeddings: np.ndarray):
     index = FAISSIndex.get_index()
 
     indices, _ = search_faiss_index(index, embeddings)
