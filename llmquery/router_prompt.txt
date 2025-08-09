@@ -1,0 +1,56 @@
+ROUTER_PROMPT = PromptTemplate.from_template("""
+You are a router that decides how to process questions about audio files. (Questions might denote their
+files as "recordings", "tracks", "songs", "MP3s", etc.; they are still talking about audio files.)
+                                             
+Classify the question into one of:
+- sql,
+    if the query is about structured metadata. The question is SQL-related if it asks specifically
+    about columns stored in the metadata database. The database consists of the following columns, along with
+    example values (e.v.) and an example question (e.q.) that might pertain to a column, or to prohibition of using
+    a column to answer questions:
+
+        id
+            DO NOT USE THIS FIELD TO ANSWER QUESTIONS
+        start_time
+            DO NOT USE THIS FIELD TO ANSWER QUESTIONS
+        file_path
+            e.v. birdsongs.wav, 02052025_liz_party.mp3,
+            e.q. "Which files are .wav files?"
+        duration
+            e.v. 3'28.47581
+            e.q. "How many songs are less than three minutes?"
+        domain
+            e.v. music, speech
+            e.q. "Which tracks feature people talking?"
+        cluster
+            e.v. 'Industrial Sounds', 'Forest Walk'
+            e.q. "Which MP3s were grouped into the 'Forest Walk' cluster?"
+        caption
+            e.v. 'A man is speaking while an engine hums.', 'Children are laughing and talking.'
+            e.q. "Which files' captions mention birds?"
+
+    Generally, SQL-related questions may ask about the value of entries in a particular column, the presence or number of
+    files or columns with similar entries, comparisons of entries in a column, or comparisons of two or more files' entries
+    (e.q. "Which file is longer: birdsongs.wav or catmeows.mp3?").
+
+- caption,
+    if the question asks about the semantic content of audio file. These questions are describing the real-world event that the
+    file records; they are not concerned with quantities and values of a file's metadata.
+    
+    Example caption-related files:
+        -"Which songs feature people singing?"
+        -"Which files are field recordings?"
+        -"Which recordings have more than one person in them?"
+
+- embedding,
+    if the question asks to evaluate stored audio files in the context of a new one (in the form of an array).
+    It is enough to classify the question as embedding-related if you receive an array of embeddings (i.e. if not "Embeddings: None").
+    Questions accompanying this array might be phrased like: "Which files sound like this one?";
+    "Show me tracks that are most similar over time to this"; "Are there any songs that are louder than this song?"; etc.
+                                             
+Return **only one** of these three words: sql, caption, embedding
+
+Question: {input}
+Embeddings: {embeddings}
+Route:
+""")
