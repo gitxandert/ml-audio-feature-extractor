@@ -24,7 +24,7 @@ The 2D plot below shows how a Gaussian Mixture Model (GMM) works with the Bayesi
 
 ![GMM + BIC plot](media/cluster_plot.png)
 
-Users can force clustering for more densely-populated sets of audio files. The plot below shows how 100 speech files were forced into 12 distinct clusters.
+Users can force clustering for more densely-populated sets of audio files. The plot below shows how 100 speech files were forced into 12 distinct clusters. (The clusters have been reduced from a 10-dimensional space to 3D.)
 
 ![Forced clustering plot](media/forced_clustering.png)
 
