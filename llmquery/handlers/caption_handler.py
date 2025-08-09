@@ -12,13 +12,19 @@ Here is a list of files with their descriptions:
 {captioned_files}
 
 Refer to this list to answer the following question: {query}
+                                              
+Note that specific words in the question may not appear in any of the captions; that's okay,
+because you're not just matching input text with stored text: you are comparing semantic content.
+For example, if a question asks, "Which recordings are field recordings?", you are not just
+looking for the word 'field': you are looking for words that correspond to *characteristics*
+of a field recording (ambient sounds, animal noises, 'leaves', 'water', etc.).
 
 **Respond only with file names whose descriptions match the question. Do not explain your reasoning.**
 
 For example, given the following list...
-birdsounds.wav: "Birds are singing in a field"
-pigsounds.wav: "Pigs are oinking in the mud"
-fishsounds.wav: "Fish are splashing in the water"
+- birdsounds.wav: "Birds are singing in a field"
+- pigsounds.mp3: "Pigs are oinking in the mud"
+- fishsounds.aiff: "Fish are splashing in the water"
 
 ... and the question, "Which files feature bird sounds?"
 
