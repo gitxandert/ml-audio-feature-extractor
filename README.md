@@ -12,6 +12,10 @@ Files can be grouped via unsupervised clustering with automatic cluster count es
 
 When files are clustered, their captions are sent to Mistral, which summarizes the cluster based on the captions and assigns the cluster a generic title. Users will be able to take in at a glance how the program has decided to cluster their files and will be able to query the program about these files more easily, based on the text that has been assigned to them.
 
+Users can query their dataset via a LangChain LLM router. Based on the content of the user's query, the router decides whether to invoke an SQL agent to sort through SQL metadata ("Which files are between 2 and 3 minutes long?"), a semantic agent to match content between the user's query and the audio files' captions "Which of these files are field recordings?"), or an FAISS agent that indexes stored embeddings based on new audio content provided by the user ("Which files sound most similar to *this one*?").
+
+##Examples
+
 The animation below depicts how the program sorts UMAP-reduced audio embeddings in time by semantic similarity.
 
 ![UMAP animation](media/embedding_animation.gif)
