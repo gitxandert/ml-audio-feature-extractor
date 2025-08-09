@@ -14,7 +14,7 @@ When files are clustered, their captions are sent to Mistral, which summarizes t
 
 Users can query their dataset via a LangChain LLM router. Based on the content of the user's query, the router decides whether to invoke an SQL agent to sort through SQL metadata ("Which files are between 2 and 3 minutes long?"), a semantic agent to match content between the user's query and the audio files' captions "Which of these files are field recordings?"), or an FAISS agent that indexes stored embeddings based on new audio content provided by the user ("Which files sound most similar to *this one*?").
 
-##Examples
+## Examples
 
 The animation below depicts how the program sorts UMAP-reduced audio embeddings in time by semantic similarity.
 
